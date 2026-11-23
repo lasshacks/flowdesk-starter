@@ -1,0 +1,221 @@
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '3.5.16'
+}
+
+group = 'com.flowdesk'
+version = '0.0.1-SNAPSHOT'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(21)
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+sourceSets {
+    migration
+}
+
+// Keep main and migration IDE source roots distinct; shared roots lose resource includes in JDT.
+tasks.named('processMigrationResources') {
+    from('src/main/resources') { include 'db/migration/**' }
+}
+
+dependencies {
+    migrationImplementation platform('org.springframework.boot:spring-boot-dependencies:3.5.16')
+    migrationImplementation 'org.flywaydb:flyway-core'
+    migrationRuntimeOnly 'org.flywaydb:flyway-database-postgresql'
+    migrationRuntimeOnly 'org.postgresql:postgresql'
+    implementation platform('org.springframework.boot:spring-boot-dependencies:3.5.16')
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    implementation 'org.springframework.boot:spring-boot-starter-jdbc'
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    runtimeOnly 'org.postgresql:postgresql'
+
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    testImplementation 'org.testcontainers:postgresql'
+    testImplementation 'org.testcontainers:junit-jupiter'
+    testImplementation 'org.flywaydb:flyway-core'
+    testRuntimeOnly 'org.flywaydb:flyway-database-postgresql'
+}
+
+tasks.register('runMigration', JavaExec) {
+    group = 'database'
+    description = 'Explicit local provisioning or migration; never runs with app startup.'
+    classpath = sourceSets.migration.runtimeClasspath
+    mainClass = 'com.flowdesk.migration.LocalMigrationRunner'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+    doFirst {
+        args = [providers.gradleProperty('migrationAction').getOrElse('')]
+    }
+}
+
+tasks.register('runSeed', JavaExec) {
+    group = 'database'
+    description = 'Explicit local development seed; never runs with app startup or migration.'
+    classpath = sourceSets.migration.runtimeClasspath
+    mainClass = 'com.flowdesk.seed.LocalSeedRunner'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+    doFirst {
+        args = [providers.gradleProperty('seedAction').getOrElse('')]
+    }
+}
+
+tasks.register('runAppReadAccess', JavaExec) {
+    group = 'database'
+    description = 'Explicit local app SELECT provisioning; never runs on application startup.'
+    classpath = sourceSets.migration.runtimeClasspath
+    mainClass = 'com.flowdesk.migration.AppReadAccessRunner'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+    args 'Apply'
+}
+
+tasks.register('runAppWorkspaceCreateAccess', JavaExec) {
+    group = 'database'
+    description = 'Explicit local workspace INSERT provisioning; never runs on application startup.'
+    classpath = sourceSets.migration.runtimeClasspath
+    mainClass = 'com.flowdesk.migration.AppWorkspaceCreateAccessRunner'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+    args 'Apply'
+}
+
+tasks.register('runAppWorkspaceRenameAccess', JavaExec) {
+    group = 'database'
+    description = 'Explicit local workspace column UPDATE provisioning; never runs at app startup.'
+    classpath = sourceSets.migration.runtimeClasspath
+    mainClass = 'com.flowdesk.migration.AppWorkspaceRenameAccessRunner'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+    args 'Apply'
+}
+
+tasks.register('runAppWorkspaceMemberListAccess', JavaExec) {
+    group = 'database'
+    description = 'Explicit Workspace member-list SELECT policy; never runs on app startup.'
+    classpath = sourceSets.migration.runtimeClasspath
+    mainClass = 'com.flowdesk.migration.AppWorkspaceMemberListAccessRunner'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+    args 'Apply'
+}
+
+tasks.register('runAppProjectCreateAccess', JavaExec) {
+    group = 'database'
+    description = 'Explicit Project SELECT/INSERT provisioning; never runs at app startup.'
+    classpath = sourceSets.migration.runtimeClasspath
+    mainClass = 'com.flowdesk.migration.AppProjectCreateAccessRunner'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+    args 'Apply'
+}
+
+tasks.register('runAppProjectUpdateAccess', JavaExec) {
+    group = 'database'
+    description = 'Explicit Project column UPDATE provisioning; never runs at app startup.'
+    classpath = sourceSets.migration.runtimeClasspath
+    mainClass = 'com.flowdesk.migration.AppProjectUpdateAccessRunner'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+    args 'Apply'
+}
+
+tasks.register('runAppProjectArchiveAccess', JavaExec) {
+    group = 'database'
+    description = 'Explicit Project archived_at column UPDATE provisioning; never runs at app startup.'
+    classpath = sourceSets.migration.runtimeClasspath
+    mainClass = 'com.flowdesk.migration.AppProjectArchiveAccessRunner'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+    args 'Apply'
+}
+
+tasks.register('runAppTaskArchiveAccess', JavaExec) {
+    group = 'database'
+    description = 'Explicit Task archived_at column UPDATE provisioning; never runs on app startup.'
+    classpath = sourceSets.migration.runtimeClasspath
+    mainClass = 'com.flowdesk.migration.AppTaskArchiveAccessRunner'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+    args 'Apply'
+}
+
+tasks.named('test') {
+    useJUnitPlatform { excludeTags 'frontend-proxy' }
+    dependsOn tasks.named('migrationClasses')
+    // Tests launch the real seed entry point in a separate JVM against Testcontainers only.
+    systemProperty 'flowdesk.seed.classpath', sourceSets.migration.runtimeClasspath.asPath
+}
+
+// Explicit cross-stack check: requires frontend npm ci as well as Docker/Java/Node.
+tasks.register('verifyWorkspaceProxy', Test) {
+    group = 'verification'
+    description = 'Verify POST Origin preservation through the real Vite proxy using an isolated database.'
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    useJUnitPlatform { includeTags 'frontend-proxy' }
+    dependsOn tasks.named('migrationClasses')
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+    systemProperty 'flowdesk.seed.classpath', sourceSets.migration.runtimeClasspath.asPath
+}
+
+tasks.named('processTestResources') {
+    from('../infra') {
+        include 'app-role.sql'
+        into 'db'
+    }
+}
+
+tasks.register('runAppTaskCreateAccess', JavaExec) {
+    group = 'database'
+    description = 'Explicit Task SELECT/INSERT provisioning; never runs at app startup.'
+    classpath = sourceSets.migration.runtimeClasspath
+    mainClass = 'com.flowdesk.migration.AppTaskCreateAccessRunner'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+    args 'Apply'
+}
+
+
+tasks.register('runAppTaskUpdateAccess', JavaExec) {
+    group = 'database'
+    description = 'Explicit Task column UPDATE provisioning; never runs at app startup.'
+    classpath = sourceSets.migration.runtimeClasspath
+    mainClass = 'com.flowdesk.migration.AppTaskUpdateAccessRunner'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+    args 'Apply'
+}
+
+tasks.register('runAppTaskStatusChangeAccess', JavaExec) {
+    group = 'database'
+    description = 'Explicit Task status UPDATE/activity column INSERT; never runs at app startup.'
+    classpath = sourceSets.migration.runtimeClasspath
+    mainClass = 'com.flowdesk.migration.AppTaskStatusChangeAccessRunner'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+    args 'Apply'
+}
+
+tasks.register('runAppTaskStatusHistoryReadAccess', JavaExec) {
+    group = 'database'
+    description = 'Explicit Task status history column SELECT; never runs at app startup.'
+    classpath = sourceSets.migration.runtimeClasspath
+    mainClass = 'com.flowdesk.migration.AppTaskStatusHistoryReadAccessRunner'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+    args 'Apply'
+}
+
+tasks.register('runAppTaskAssigneeDueDateAccess', JavaExec) {
+    group = 'database'
+    description = 'Explicit Task assignee/due-date column privileges; never runs at app startup.'
+    classpath = sourceSets.migration.runtimeClasspath
+    mainClass = 'com.flowdesk.migration.AppTaskAssigneeDueDateAccessRunner'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+    args 'Apply'
+}
+
+tasks.register('runAppWorkspaceMembershipManagementAccess', JavaExec) {
+    group = 'database'
+    description = 'Explicit Workspace membership/invitation privileges; never runs at app startup.'
+    classpath = sourceSets.migration.runtimeClasspath
+    mainClass = 'com.flowdesk.migration.AppWorkspaceMembershipManagementAccessRunner'
+    javaLauncher = javaToolchains.launcherFor { languageVersion = JavaLanguageVersion.of(21) }
+    args 'Apply'
+}

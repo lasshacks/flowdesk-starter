@@ -1,0 +1,16 @@
+# Local secrets
+.env
+.env.*
+!.env.example
+!**/.env.example
+
+# Build outputs and local caches
+.gradle/
+build/
+node_modules/
+dist/
+
+# IDE and local logs
+.idea/
+*.iml
+*.log
